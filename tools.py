@@ -3,7 +3,7 @@ import os
 import requests
 import sys
 
-REPO = "genotrance/px"
+REPO = "ltauvel/px"
 
 def get_argval(name):
     for i in range(len(sys.argv)):
