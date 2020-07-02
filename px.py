@@ -452,7 +452,7 @@ class AuthMessageGenerator:
 
 ###
 # Proxy handler
-
+POXY_IP_SCHEME=None
 class Proxy(httpserver.SimpleHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -484,7 +484,41 @@ class Proxy(httpserver.SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         dprint(format % args)
 
+    def do_socket_try_connect(self, scheme, dest):
+        global POXY_IP_SCHEME
+
+        dprint("Try " + str(scheme) + " connection: " + str(dest))
+        proxy_socket = socket.socket(scheme, socket.SOCK_STREAM)
+        try:
+            proxy_socket.connect(dest)
+            POXY_IP_SCHEME = scheme
+            self.proxy_address = dest
+            self.proxy_socket = proxy_socket
+
+            dprint("Connect succeeded")
+
+            return True
+        except Exception as e:
+            dprint("Connect failed: %s" % e)
+
+            # Unset prefered scheme
+            POXY_IP_SCHEME = None
+
+            # move a non reachable proxy to the end of the proxy list;
+            if len(self.proxy_servers) > 1:
+                POXY_IP_SCHEME = None
+                # append first and then remove, this should ensure thread
+                # safety with manual configurated proxies (in this case
+                # self.proxy_servers references the shared
+                # State.proxy_server)
+                self.proxy_servers.append(dest)
+                self.proxy_servers.remove(dest)
+
+            return False
+
     def do_socket_connect(self, destination=None):
+        global POXY_IP_SCHEME
+
         # Already connected?
         if self.proxy_socket is not None:
             return True
@@ -492,23 +526,13 @@ class Proxy(httpserver.SimpleHTTPRequestHandler):
         dests = list(self.proxy_servers) if destination is None else [
             destination]
         for dest in dests:
-            dprint("New connection: " + str(dest))
-            proxy_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            try:
-                proxy_socket.connect(dest)
-                self.proxy_address = dest
-                self.proxy_socket = proxy_socket
+            if (POXY_IP_SCHEME is not None and 
+                self.do_socket_try_connect(POXY_IP_SCHEME, dest) ):
                 break
-            except Exception as e:
-                dprint("Connect failed: %s" % e)
-                # move a non reachable proxy to the end of the proxy list;
-                if len(self.proxy_servers) > 1:
-                    # append first and then remove, this should ensure thread
-                    # safety with manual configurated proxies (in this case
-                    # self.proxy_servers references the shared
-                    # State.proxy_server)
-                    self.proxy_servers.append(dest)
-                    self.proxy_servers.remove(dest)
+            elif self.do_socket_try_connect(socket.AF_INET, dest):
+                break
+            elif self.do_socket_try_connect(socket.AF_INET6, dest):
+                break
 
         if self.proxy_socket is not None:
             return True

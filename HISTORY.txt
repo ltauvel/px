@@ -1,4 +1,5 @@
 TBD
+- Handle IPv6 connection to the proxy
 - Added support for issue #58 - authentication with user/password when SSPI is
   unavailable or not preferred.
 - Pulled PR #68 to handle case where no longer behind PAC proxy
